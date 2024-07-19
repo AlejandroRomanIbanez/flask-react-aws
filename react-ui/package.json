@@ -6,7 +6,7 @@
     "build": {
         "yarn": "v14.0.0,v16.0.0",
         "npm": "v14.0.0,v16.0.0"
-    },    
+    },
     "dependencies": {
         "@emotion/react": "^11.4.0",
         "@emotion/styled": "^11.3.0",
@@ -21,8 +21,10 @@
         "@testing-library/react": "^11.2.6",
         "@testing-library/user-event": "^12.8.3",
         "apexcharts": "^3.26.1",
+        "aws-amplify": "^5.1.0",
         "axios": "^0.21.1",
         "clsx": "^1.1.1",
+        "dotenv": "^16.4.5",
         "formik": "^2.2.6",
         "framer-motion": "^4.1.13",
         "material-ui-popup-state": "^1.8.0",

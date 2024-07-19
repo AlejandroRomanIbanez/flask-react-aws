@@ -19,7 +19,7 @@ mongo = MongoClient(MONGO_URI)
 def create_app():
     app = Flask(__name__)
     app.config.from_object('api.config.BaseConfig')
-    CORS(app)
+    CORS(app, supports_credentials=True, resources={r"/*": {"origins": "*"}})
 
     from .routes import rest_api
 

@@ -6,13 +6,15 @@ Copyright (c) 2019 - present AppSeed.us
 from functools import wraps
 
 import requests
-from flask import request, redirect
+from flask import request, redirect, make_response
 from flask_restx import Api, Resource, fields
 from . import mongo
 from .models import Users
 import boto3
 from dotenv import load_dotenv
 from .config import BaseConfig
+import json
+from datetime import datetime
 
 load_dotenv()
 COGNITO_APP_CLIENT_ID = BaseConfig.COGNITO_APP_CLIENT_ID
@@ -45,10 +47,31 @@ user_edit_model = rest_api.model('UserEditModel', {
     "email": fields.String(required=True, min_length=4, max_length=64)
 })
 
+
+def refresh_token(refresh_token):
+    try:
+        token_url = f"https://{COGNITO_DOMAIN}/oauth2/token"
+        token_data = {
+            'grant_type': 'refresh_token',
+            'client_id': COGNITO_APP_CLIENT_ID,
+            'refresh_token': refresh_token,
+        }
+        token_headers = {'Content-Type': 'application/x-www-form-urlencoded'}
+        token_response = requests.post(token_url, data=token_data, headers=token_headers)
+        token_json = token_response.json()
+
+        if 'error' in token_json:
+            return None, token_json['error']
+
+        return token_json, None
+    except Exception as e:
+        return None, str(e)
+
+
 def token_required(f):
     @wraps(f)
     def decorator(*args, **kwargs):
-        token = request.headers["authorization"]
+        token = request.headers.get("Authorization")
         token = token.replace("Bearer ", "").strip()
         if not token:
             return {"success": False, "msg": "Valid JWT token is missing"}, 400
@@ -62,14 +85,27 @@ def token_required(f):
                     current_user_email = attribute['Value']
                     break
             if not current_user_email:
-                return {"success": False, "msg": "User not found"}, 400,
+                return {"success": False, "msg": "User not found"}, 400
 
             current_user = Users.get_by_email(current_user_email)
             if not current_user:
                 return {"success": False, "msg": "User not found in database"}, 400
 
         except cognito_client.exceptions.NotAuthorizedException:
-            return {"success": False, "msg": "Token is invalid or expired"}, 400
+            refresh_token_value = request.cookies.get('refresh_token')
+            if not refresh_token_value:
+                return {"success": False, "msg": "Token is invalid or expired"}, 400
+
+            token_json, error = refresh_token(refresh_token_value)
+            if error:
+                return {"success": False, "msg": "Token refresh failed: " + error}, 400
+
+            access_token = token_json['access_token']
+            id_token = token_json['id_token']
+            response = make_response({"success": True, "access_token": access_token, "id_token": id_token})
+            response.set_cookie('access_token', access_token, httponly=True, secure=True)
+            response.set_cookie('id_token', id_token, httponly=True, secure=True)
+            return response
 
         return f(current_user, *args, **kwargs)
     return decorator
@@ -155,6 +191,7 @@ class LogoutUser(Resource):
                 return {"success": False, "msg": "Authorization header is missing"}, 401
 
             token = token.replace("Bearer ", "").strip()
+            print(f"Received token: {token}")
             if not token:
                 return {"success": False, "msg": "Valid JWT token is missing"}, 400
 
@@ -167,26 +204,16 @@ class LogoutUser(Resource):
             return {"success": False, "msg": f"An error occurred: {str(e)}"}, 500
 
 
-@rest_api.route('/api/users/google-login')
-class GoogleLogin(Resource):
-    def get(self):
-        redirect_uri = (
-            f"https://{COGNITO_DOMAIN}/oauth2/authorize"
-            f"?response_type=code&client_id={COGNITO_APP_CLIENT_ID}&redirect_uri={COGNITO_REDIRECT_URI}"
-            f"&identity_provider=Google&scope=email+openid+profile"
-        )
-        return redirect(redirect_uri)
-
-
-@rest_api.route('/api/users/callback')
-class Callback(Resource):
+@rest_api.route('/api/users/callback', methods=['GET'])
+class OAuthCallback(Resource):
     def get(self):
         code = request.args.get('code')
         if not code:
+            print("Code not provided in the request.")
             return {"success": False, "msg": "Code not provided"}, 400
 
         try:
-            # Exchange the authorization code for tokens
+            print(f"Received code: {code}")
             token_url = f"https://{COGNITO_DOMAIN}/oauth2/token"
             token_data = {
                 'grant_type': 'authorization_code',
@@ -194,26 +221,27 @@ class Callback(Resource):
                 'code': code,
                 'redirect_uri': COGNITO_REDIRECT_URI,
             }
-            token_headers = {
-                'Content-Type': 'application/x-www-form-urlencoded'
-            }
+            token_headers = {'Content-Type': 'application/x-www-form-urlencoded'}
             token_response = requests.post(token_url, data=token_data, headers=token_headers)
             token_json = token_response.json()
 
+            print(f"Token response: {token_json}")
+
             if 'error' in token_json:
+                print(f"Error in token response: {token_json['error']}")
                 return {"success": False, "msg": token_json['error']}, 400
 
             access_token = token_json['access_token']
             id_token = token_json['id_token']
+            refresh_token = token_json['refresh_token']
 
-            # Get user info from the access token
             user_info_url = f"https://{COGNITO_DOMAIN}/oauth2/userInfo"
             user_info_response = requests.get(user_info_url, headers={'Authorization': f'Bearer {access_token}'})
             user_info = user_info_response.json()
 
             email = user_info.get('email')
-
             if not email:
+                print("Email not found in user info.")
                 return {"success": False, "msg": "Email not found in user info"}, 400
 
             user_exists = mongo.db.users.find_one({"email": email})
@@ -230,6 +258,90 @@ class Callback(Resource):
                 print(f"Existing user found: {email}")
 
             user = Users(**user_exists) if user_exists else new_user
+            user_json = json.dumps(user.to_json())
+
+            # Set tokens in HTTP-only cookies
+            response = make_response(redirect("http://localhost:3000/api/users/callback"))
+            response.set_cookie('access_token', access_token, httponly=True, secure=True)
+            response.set_cookie('id_token', id_token, httponly=True, secure=True)
+            response.set_cookie('refresh_token', refresh_token, httponly=True, secure=True)
+            response.set_cookie('user', user_json, httponly=True, secure=True)
+            return response
+        except Exception as e:
+            print(f"Exception occurred: {str(e)}")
+            return {"success": False, "msg": str(e)}, 500
+
+
+@rest_api.route('/api/users/authenticate-with-cookies', methods=['GET'])
+class AuthenticateWithCookies(Resource):
+    def get(self):
+        try:
+            access_token = request.cookies.get('access_token')
+            id_token = request.cookies.get('id_token')
+            user_json = request.cookies.get('user')
+
+            if not access_token or not id_token or not user_json:
+                return {"success": False, "msg": "Tokens or user info not found in cookies"}, 400
+
+            user = Users.from_json(user_json)
+
             return {"success": True, "token": access_token, "id_token": id_token, "user": user.to_json()}, 200
         except Exception as e:
             return {"success": False, "msg": str(e)}, 500
+
+
+# @rest_api.route('/api/users/callback')
+# class Callback(Resource):
+#     def get(self):
+#         code = request.args.get('code')
+#         if not code:
+#             return {"success": False, "msg": "Code not provided"}, 400
+#
+#         try:
+#             # Exchange the authorization code for tokens
+#             token_url = f"https://{COGNITO_DOMAIN}/oauth2/token"
+#             token_data = {
+#                 'grant_type': 'authorization_code',
+#                 'client_id': COGNITO_APP_CLIENT_ID,
+#                 'code': code,
+#                 'redirect_uri': COGNITO_REDIRECT_URI,
+#             }
+#             token_headers = {
+#                 'Content-Type': 'application/x-www-form-urlencoded'
+#             }
+#             token_response = requests.post(token_url, data=token_data, headers=token_headers)
+#             token_json = token_response.json()
+#
+#             if 'error' in token_json:
+#                 return {"success": False, "msg": token_json['error']}, 400
+#
+#             access_token = token_json['access_token']
+#             id_token = token_json['id_token']
+#
+#             # Get user info from the access token
+#             user_info_url = f"https://{COGNITO_DOMAIN}/oauth2/userInfo"
+#             user_info_response = requests.get(user_info_url, headers={'Authorization': f'Bearer {access_token}'})
+#             user_info = user_info_response.json()
+#
+#             email = user_info.get('email')
+#
+#             if not email:
+#                 return {"success": False, "msg": "Email not found in user info"}, 400
+#
+#             user_exists = mongo.db.users.find_one({"email": email})
+#             if not user_exists:
+#                 # Create a new user if not found in the database
+#                 new_user = Users(username=user_info.get('username'), email=email)
+#                 new_user.save()
+#
+#                 # Log the creation of a new user
+#                 print(f"New user created: {email}")
+#
+#             else:
+#                 # Log the existing user information
+#                 print(f"Existing user found: {email}")
+#
+#             user = Users(**user_exists) if user_exists else new_user
+#             return {"success": True, "token": access_token, "id_token": id_token, "user": user.to_json()}, 200
+#         except Exception as e:
+#             return {"success": False, "msg": str(e)}, 500

@@ -134,23 +134,31 @@ const ProfileSection = () => {
     const handleLogout = () => {
         console.log(account.token);
         axios
-            .post( configData.API_SERVER + 'users/logout', {token: `${account.token}`}, { headers: { Authorization: `${account.token}` } })
+            .post(configData.API_SERVER + 'users/logout', {}, { headers: { Authorization: `Bearer ${account.token}` }, withCredentials: true })
             .then(function (response) {
-                
-                // Force the LOGOUT
-                //if (response.data.success) {
+                if (response.data.success) {
+                    // Clear cookies if they exist
+                    document.cookie = 'access_token=; Max-Age=0; path=/; domain=localhost';
+                    document.cookie = 'id_token=; Max-Age=0; path=/; domain=localhost';
+                    document.cookie = 'user=; Max-Age=0; path=/; domain=localhost';
+
+                    // Dispatch logout action
                     dispatcher({ type: LOGOUT });
-                //} else {
-                //    console.log('response - ', response.data.msg);
-                //}
+                } else {
+                    console.log('response - ', response.data.msg);
+                }
             })
             .catch(function (error) {
                 console.log('error - ', error);
             });
     };
+
+
     const handleToggle = () => {
         setOpen((prevOpen) => !prevOpen);
     };
+
+
     const handleClose = (event) => {
         if (anchorRef.current && anchorRef.current.contains(event.target)) {
             return;
@@ -158,6 +166,8 @@ const ProfileSection = () => {
 
         setOpen(false);
     };
+
+
     const prevOpen = React.useRef(open);
     React.useEffect(() => {
         if (prevOpen.current === true && open === false) {

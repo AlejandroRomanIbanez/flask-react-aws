@@ -8,6 +8,7 @@ from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
 from . import mongo
 from bson import ObjectId
+import json
 
 
 class Users:
@@ -73,3 +74,18 @@ class Users:
         user_dict = self.to_dict()
         user_dict["_id"] = str(self._id)
         return user_dict
+
+    @staticmethod
+    def from_json(json_str):
+        try:
+            data = json.loads(json_str)
+            # Convert date_joined back to datetime
+            date_joined_str = data.get('date_joined')
+            date_joined = datetime.fromisoformat(date_joined_str) if date_joined_str else None
+            return Users(
+                username=data.get('username'),
+                email=data.get('email'),
+                date_joined=date_joined
+            )
+        except (json.JSONDecodeError, ValueError) as e:
+            raise ValueError(f"Invalid JSON or date format: {e}")

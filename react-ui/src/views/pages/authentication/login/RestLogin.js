@@ -35,6 +35,8 @@ import { ACCOUNT_INITIALIZE } from './../../../../store/actions';
 import Visibility from '@material-ui/icons/Visibility';
 import VisibilityOff from '@material-ui/icons/VisibilityOff';
 
+import GoogleSignIn from './GoogleSign';
+
 // style constant
 const useStyles = makeStyles((theme) => ({
     redButton: {
@@ -253,6 +255,16 @@ const RestLogin = (props, { ...others }) => {
                                 >
                                     Sign IN
                                 </Button>
+                            </AnimateButton>
+                        </Box>
+
+                        <Box
+                            sx={{
+                                mt: 2
+                            }}
+                        >
+                            <AnimateButton>
+                                <GoogleSignIn />
                             </AnimateButton>
                         </Box>
                     </form>
