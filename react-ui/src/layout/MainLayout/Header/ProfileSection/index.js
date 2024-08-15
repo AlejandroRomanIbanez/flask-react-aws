@@ -133,19 +133,25 @@ const ProfileSection = () => {
     const anchorRef = React.useRef(null);
     const handleLogout = () => {
         console.log(account.token);
+
+        localStorage.removeItem('access_token');
+        localStorage.removeItem('id_token');
+        localStorage.removeItem('refresh_token');
+        localStorage.removeItem('user');
+        localStorage.removeItem('berry-account');
+
+        // Dispatch logout action to update app state
+        dispatcher({ type: LOGOUT });
+
         axios
             .post(configData.API_SERVER + 'users/logout', {}, { headers: { Authorization: `Bearer ${account.token}` }, withCredentials: true })
             .then(function (response) {
                 if (response.data.success) {
-                    // Clear cookies if they exist
-                    document.cookie = 'access_token=; Max-Age=0; path=/; domain=localhost';
-                    document.cookie = 'id_token=; Max-Age=0; path=/; domain=localhost';
-                    document.cookie = 'user=; Max-Age=0; path=/; domain=localhost';
-
-                    // Dispatch logout action
-                    dispatcher({ type: LOGOUT });
+                    console.log('Logged out successfully');
+                } else if (response.data.msg.includes("invalid or expired")) {
+                    console.log('Token was invalid or expired. Session already terminated.');
                 } else {
-                    console.log('response - ', response.data.msg);
+                    console.log('Logout response - ', response.data.msg);
                 }
             })
             .catch(function (error) {

@@ -10,36 +10,35 @@ const Callback = () => {
     const dispatch = useDispatch();
 
     useEffect(() => {
-
-        const refreshToken = async () => {
-            try {
-                const response = await axios.post(configData.API_SERVER + 'users/refresh-token', {}, { withCredentials: true });
-                if (response.data.success) {
-                    return {
-                        accessToken: response.data.access_token,
-                        idToken: response.data.id_token,
-                    };
-                }
-            } catch (error) {
-                console.error('Error refreshing token', error);
-            }
-            return null;
-        };
         const handleAuthResponse = async () => {
             try {
-                console.log('Making request to /api/users/authenticate-with-cookies');
-                const response = await axios.get(configData.API_SERVER + 'users/authenticate-with-cookies', { withCredentials: true });
-                console.log('Response from /api/users/authenticate-with-cookies:', response.data);
+                const params = new URLSearchParams(window.location.search);
+                const code = params.get('code');
+                if (!code) {
+                    console.error("Authorization code not found in the URL.");
+                    return;
+                }
+
+                const response = await axios.get(configData.API_SERVER + 'users/callback', { params: { code } });
+                console.log('Response from /api/users/callback:', response.data);
 
                 if (response.data.success) {
-                    const { token, id_token, user } = response.data;
-                    console.log("Received tokens and user info", response.data);
+                    const { access_token, id_token, refresh_token, user } = response.data;
+
+                    // Store tokens in localStorage
+                    localStorage.setItem('access_token', access_token);
+                    localStorage.setItem('id_token', id_token);
+                    localStorage.setItem('refresh_token', refresh_token);
+                    localStorage.setItem('user', user);
 
                     // Dispatch authentication state
                     dispatch({
                         type: ACCOUNT_INITIALIZE,
-                        payload: { isLoggedIn: true, user: user, token: token }
+                        payload: { isLoggedIn: true, user: JSON.parse(user), token: access_token }
                     });
+
+                    // Redirect to the desired route
+                    history.push('/dashboard/default');
                 } else {
                     console.error('Authentication failed:', response.data.msg);
                 }
