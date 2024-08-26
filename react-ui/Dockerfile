@@ -1,22 +1,15 @@
-# pull official base image
-FROM node:14-alpine
+# Use a lightweight base image with Nginx
+FROM nginx:alpine
 
-# set working directory
-WORKDIR /app
+# Copy Nginx configuration file
+COPY react-ui/nginx.conf /etc/nginx/nginx.conf
 
-# add `/app/node_modules/.bin` to $PATH
-ENV PATH /app/node_modules/.bin:$PATH
+# Copy the pre-built React app into the Nginx directory
+COPY react-ui/build/ /usr/share/nginx/html/
 
-# install app dependencies
-COPY package.json ./
-RUN npm install --silent
-RUN npm install react-scripts@4.0.0 -g --silent
+# Expose ports 80 and 443
+EXPOSE 80
+EXPOSE 443
 
-# add app
-COPY . ./
-
-# Expose port
-EXPOSE 3000
-
-# start app
-CMD ["npm", "start"]
+# Command to run Nginx in the foreground
+CMD ["nginx", "-g", "daemon off;"]

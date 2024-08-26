@@ -4,17 +4,21 @@ Copyright (c) 2019 - present AppSeed.us
 """
 
 from functools import wraps
-
-import requests
-from flask import request, redirect, make_response
+from flask import request, redirect, make_response, jsonify, session
 from flask_restx import Api, Resource, fields
 from . import mongo
 from .models import Users
-import boto3
 from dotenv import load_dotenv
 from .config import BaseConfig
+from datetime import datetime, timedelta
+import os
+import base64
+import hashlib
+import requests
+import boto3
 import json
-from datetime import datetime
+import string
+import random
 
 load_dotenv()
 COGNITO_APP_CLIENT_ID = BaseConfig.COGNITO_APP_CLIENT_ID
@@ -23,11 +27,34 @@ COGNITO_DOMAIN = BaseConfig.COGNITO_DOMAIN
 COGNITO_REDIRECT_URI = BaseConfig.COGNITO_REDIRECT_URI
 GOOGLE_CLIENT_ID = BaseConfig.GOOGLE_CLIENT_ID
 GOOGLE_CLIENT_SECRET = BaseConfig.GOOGLE_CLIENT_SECRET
+SALESFORCE_CLIENT_ID = BaseConfig.SALESFORCE_CLIENT_ID
+SALESFORCE_CLIENT_SECRET = BaseConfig.SALESFORCE_CLIENT_SECRET
+SALESFORCE_REDIRECT_URI = BaseConfig.SALESFORCE_REDIRECT_URI
 
 cognito_client = boto3.client("cognito-idp", region_name=COGNITO_REGION)
 
 
 rest_api = Api(version="1.0", title="Users API")
+
+def save_session(session_token, data, expires_in=300):
+    expires_at = datetime.utcnow() + timedelta(seconds=expires_in)
+    mongo.db.sessions.update_one(
+        {'session_token': session_token},
+        {'$set': {'data': data, 'expires_at': expires_at}},
+        upsert=True
+    )
+    return session_token
+
+
+def load_session(session_token):
+    session_data = mongo.db.sessions.find_one({'session_token': session_token})
+    if session_data and session_data['expires_at'] > datetime.utcnow():
+        return session_data['data']
+    return None
+
+
+def delete_session(session_token):
+    mongo.db.sessions.delete_one({'session_token': session_token})
 
 
 signup_model = rest_api.model('SignUpModel', {
@@ -282,3 +309,162 @@ class OAuthCallback(Resource):
             }, 200
         except Exception as e:
             return {"success": False, "msg": str(e)}, 500
+
+def generate_session_token():
+    return base64.urlsafe_b64encode(os.urandom(24)).rstrip(b'=').decode('utf-8')
+
+def generate_code_verifier():
+    return base64.urlsafe_b64encode(os.urandom(40)).rstrip(b'=').decode('utf-8')
+
+def generate_code_challenge(verifier):
+    digest = hashlib.sha256(verifier.encode('utf-8')).digest()
+    return base64.urlsafe_b64encode(digest).rstrip(b'=').decode('utf-8')
+
+
+def generate_strong_password(length=12):
+    # Ensure the password meets Cognito's policy: at least one uppercase, one lowercase, one digit, and one special character
+    password_characters = (
+        string.ascii_letters + string.digits + string.punctuation
+    )
+    while True:
+        password = ''.join(random.choice(password_characters) for i in range(length))
+        if (any(c.islower() for c in password) and
+            any(c.isupper() for c in password) and
+            any(c.isdigit() for c in password) and
+            any(c in string.punctuation for c in password)):
+            return password
+
+@rest_api.route('/api/users/salesforce/login')
+class SalesforceLogin(Resource):
+    def get(self):
+        # Generate code verifier and challenge
+        code_verifier = generate_code_verifier()
+        code_challenge = generate_code_challenge(code_verifier)
+
+        # Generate session token and save the code_verifier in MongoDB
+        session_token = generate_session_token()
+        save_session(session_token, {'code_verifier': code_verifier})
+
+        # Debugging output
+        print("Generated Code Verifier:", code_verifier)
+        print("Session Token:", session_token)
+
+        # Return the session token and auth URL to the frontend
+        auth_url = (
+            f"https://login.salesforce.com/services/oauth2/authorize?response_type=code"
+            f"&client_id={SALESFORCE_CLIENT_ID}"
+            f"&redirect_uri={SALESFORCE_REDIRECT_URI}"
+            f"&scope=openid email profile offline_access"
+            f"&code_challenge={code_challenge}&code_challenge_method=S256"
+        )
+
+        return jsonify({"auth_url": auth_url, "session_token": session_token})
+
+
+@rest_api.route('/api/users/salesforce/callback', methods=['GET'])
+class SalesforceOauthCallback(Resource):
+    def get(self):
+        try:
+            # Retrieve the authorization code and session token from the request
+            code = request.args.get('code')
+            session_token = request.args.get('session_token')
+
+            print("Authorization Code:", code)
+            print("Session Token:", session_token)
+
+            if not code or not session_token:
+                return jsonify({"success": False, "msg": "Authorization code or session token not provided"}), 400
+
+            # Retrieve the stored code_verifier from MongoDB
+            session_data = load_session(session_token)
+            print("Session Data:", session_data)
+
+            if not session_data:
+                return jsonify({"success": False, "msg": "Session data not found"}), 400
+
+            code_verifier = session_data.get('code_verifier')
+            print("Retrieved Code Verifier:", code_verifier)
+
+            if not code_verifier:
+                return jsonify({"success": False, "msg": "Code verifier not found in session"}), 400
+
+            # Exchange the authorization code for an access token
+            token_url = "https://login.salesforce.com/services/oauth2/token"
+            token_data = {
+                'grant_type': 'authorization_code',
+                'client_id': SALESFORCE_CLIENT_ID,
+                'client_secret': SALESFORCE_CLIENT_SECRET,
+                'code': code,
+                'redirect_uri': SALESFORCE_REDIRECT_URI,
+                'code_verifier': code_verifier
+            }
+            token_headers = {'Content-Type': 'application/x-www-form-urlencoded'}
+            token_response = requests.post(token_url, data=token_data, headers=token_headers)
+            token_json = token_response.json()
+
+            print("Token Response JSON:", token_json)
+
+            if 'error' in token_json:
+                return jsonify({"success": False, "msg": token_json['error']}), 400
+
+            access_token = token_json.get('access_token')
+            refresh_token = token_json.get('refresh_token')
+            instance_url = token_json.get('instance_url')
+
+            # Retrieve user information from Salesforce
+            user_info_url = f"{instance_url}/services/oauth2/userinfo"
+            user_info_response = requests.get(user_info_url, headers={'Authorization': f'Bearer {access_token}'})
+            user_info = user_info_response.json()
+
+            print("User Info JSON:", user_info)
+
+            email = user_info.get('email')
+            if not email:
+                return jsonify({"success": False, "msg": "Email not found in user info"}), 400
+
+            existing_user = mongo.db.users.find_one({"email": email})
+
+            if not existing_user:
+                username = f"salesforce_{user_info.get('user_id')}"
+                user_data = {
+                    "username": username,
+                    "email": email,
+                    "created_at": datetime.utcnow(),
+                    "provider": "salesforce",
+                    "user_info": user_info
+                }
+                mongo.db.users.insert_one(user_data)
+                user = user_data
+            else:
+                mongo.db.users.update_one(
+                    {"email": email},
+                    {"$set": {"user_info": user_info, "provider": "salesforce"}}
+                )
+                user = existing_user
+
+            # Serialize the user data for JSON response
+            user_serialized = serialize_user(user)
+            print("Serialized User:", user_serialized)
+
+            # Prepare the response as an object with tokens and user info
+            response_data = {
+                "success": True,
+                "access_token": access_token,
+                "refresh_token": refresh_token,
+                "user": user_serialized
+            }
+            print("Response Data:", response_data)
+
+            # Optionally delete session after use
+            delete_session(session_token)
+
+            # Return the JSON response
+            return jsonify(response_data)
+
+        except Exception as e:
+            # Log the full traceback and error message
+            import traceback
+            traceback.print_exc()
+            print("Error occurred:", str(e))
+            return jsonify({"success": False, "msg": str(e)}), 500
+

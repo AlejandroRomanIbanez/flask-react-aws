@@ -1,0 +1,41 @@
+services:
+  api-server-flask:
+    build:
+      context: .
+      dockerfile: api-server-flask/Dockerfile
+    container_name: api-server-flask
+    ports:
+      - "5000:5000"
+    env_file:
+      - api-server-flask/.env
+    networks:
+      - app-network
+    depends_on:
+      - mongo
+
+  react-ui:
+    build:
+      context: .
+      dockerfile: react-ui/Dockerfile
+    container_name: react-ui
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./ssl-certs/noledgeloss.succeed.cl:/etc/ssl/certs:ro
+    networks:
+      - app-network
+    depends_on:
+      - api-server-flask
+
+  mongo:
+    image: mongo:latest
+    container_name: mongo
+    ports:
+      - "27017:27017"
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge

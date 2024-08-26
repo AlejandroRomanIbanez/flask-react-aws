@@ -18,6 +18,7 @@ mongo = MongoClient(MONGO_URI)
 
 def create_app():
     app = Flask(__name__)
+    app.secret_key = os.getenv("FLASK_SECRET_KEY", os.urandom(24))
     app.config.from_object('api.config.BaseConfig')
     CORS(app, supports_credentials=True, resources={r"/*": {"origins": "*"}})
 

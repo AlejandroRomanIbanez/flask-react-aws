@@ -1,14 +1,22 @@
-FROM python:3.9
+# Use the official Python image from the Docker Hub
+FROM python:3.12-slim
 
-COPY . .
-
-# set environment variables
+# Set environment variables
 ENV PYTHONDONTWRITEBYTECODE 1
 ENV PYTHONUNBUFFERED 1
 
-# install python dependencies
-RUN pip install --upgrade pip
+# Set the working directory
+WORKDIR /app
+
+# Copy the requirements file and install dependencies
+COPY api-server-flask/requirements.txt /app/
 RUN pip install --no-cache-dir -r requirements.txt
 
-# gunicorn
-CMD ["gunicorn", "--config", "gunicorn-cfg.py", "run:app"]
+# Copy the rest of the code
+COPY api-server-flask /app/
+
+# Expose the port Flask runs on
+EXPOSE 5000
+
+# Start the Flask application
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "run:app"]

@@ -36,6 +36,7 @@ import Visibility from '@material-ui/icons/Visibility';
 import VisibilityOff from '@material-ui/icons/VisibilityOff';
 
 import GoogleSignIn from './GoogleSign';
+import SalesforceSignIn from './SalesforceSignIn';
 
 // style constant
 const useStyles = makeStyles((theme) => ({
@@ -265,6 +266,16 @@ const RestLogin = (props, { ...others }) => {
                         >
                             <AnimateButton>
                                 <GoogleSignIn />
+                            </AnimateButton>
+                        </Box>
+
+                        <Box
+                            sx={{
+                                mt: 2
+                            }}
+                        >
+                            <AnimateButton>
+                                <SalesforceSignIn />
                             </AnimateButton>
                         </Box>
                     </form>

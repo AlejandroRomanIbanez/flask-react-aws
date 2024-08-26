@@ -6,6 +6,7 @@ import GuestGuard from './../utils/route-guard/GuestGuard';
 import MinimalLayout from './../layout/MinimalLayout';
 import NavMotion from './../layout/NavMotion';
 import Loadable from '../ui-component/Loadable';
+import SalesforceCallback from '../views/pages/authentication/login/SalesforceCallback';
 
 // login routing
 const AuthLogin = Loadable(lazy(() => import('../views/pages/authentication/login')));
@@ -18,7 +19,7 @@ const LoginRoutes = () => {
     const location = useLocation();
 
     return (
-        <Route path={['/login', '/register', '/api/users/callback']}>
+        <Route path={['/login', '/register', '/api/users/callback', '/api/users/salesforce/callback']}>
             <MinimalLayout>
                 <Switch location={location} key={location.pathname}>
                     <NavMotion>
@@ -26,6 +27,7 @@ const LoginRoutes = () => {
                             <Route path="/login" component={AuthLogin} />
                             <Route path="/register" component={AuthRegister} />
                             <Route path="/api/users/callback" component={Callback} />
+                            <Route path="/api/users/salesforce/callback" component={SalesforceCallback} />
                         </GuestGuard>
                     </NavMotion>
                 </Switch>
