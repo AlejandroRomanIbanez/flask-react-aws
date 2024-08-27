@@ -24,6 +24,7 @@ yarn-error.log*
 /.idea/
 
 .env
+/ssl-crets
 
 #amplify-do-not-edit-begin
 amplify/\#current-cloud-backend

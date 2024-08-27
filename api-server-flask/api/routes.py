@@ -24,6 +24,7 @@ load_dotenv()
 COGNITO_APP_CLIENT_ID = BaseConfig.COGNITO_APP_CLIENT_ID
 COGNITO_REGION = BaseConfig.COGNITO_REGION
 COGNITO_DOMAIN = BaseConfig.COGNITO_DOMAIN
+COGNITO_USER_POOL_ID = BaseConfig.COGNITO_USER_POOL_ID
 COGNITO_REDIRECT_URI = BaseConfig.COGNITO_REDIRECT_URI
 GOOGLE_CLIENT_ID = BaseConfig.GOOGLE_CLIENT_ID
 GOOGLE_CLIENT_SECRET = BaseConfig.GOOGLE_CLIENT_SECRET
@@ -35,26 +36,6 @@ cognito_client = boto3.client("cognito-idp", region_name=COGNITO_REGION)
 
 
 rest_api = Api(version="1.0", title="Users API")
-
-def save_session(session_token, data, expires_in=300):
-    expires_at = datetime.utcnow() + timedelta(seconds=expires_in)
-    mongo.db.sessions.update_one(
-        {'session_token': session_token},
-        {'$set': {'data': data, 'expires_at': expires_at}},
-        upsert=True
-    )
-    return session_token
-
-
-def load_session(session_token):
-    session_data = mongo.db.sessions.find_one({'session_token': session_token})
-    if session_data and session_data['expires_at'] > datetime.utcnow():
-        return session_data['data']
-    return None
-
-
-def delete_session(session_token):
-    mongo.db.sessions.delete_one({'session_token': session_token})
 
 
 signup_model = rest_api.model('SignUpModel', {
@@ -341,15 +322,10 @@ class SalesforceLogin(Resource):
         code_verifier = generate_code_verifier()
         code_challenge = generate_code_challenge(code_verifier)
 
-        # Generate session token and save the code_verifier in MongoDB
-        session_token = generate_session_token()
-        save_session(session_token, {'code_verifier': code_verifier})
-
         # Debugging output
         print("Generated Code Verifier:", code_verifier)
-        print("Session Token:", session_token)
 
-        # Return the session token and auth URL to the frontend
+        # Return the code_verifier and auth URL to the frontend
         auth_url = (
             f"https://login.salesforce.com/services/oauth2/authorize?response_type=code"
             f"&client_id={SALESFORCE_CLIENT_ID}"
@@ -358,35 +334,22 @@ class SalesforceLogin(Resource):
             f"&code_challenge={code_challenge}&code_challenge_method=S256"
         )
 
-        return jsonify({"auth_url": auth_url, "session_token": session_token})
+        return jsonify({"auth_url": auth_url, "code_verifier": code_verifier})
 
 
 @rest_api.route('/api/users/salesforce/callback', methods=['GET'])
 class SalesforceOauthCallback(Resource):
     def get(self):
         try:
-            # Retrieve the authorization code and session token from the request
+            # Retrieve the authorization code and code_verifier from the request
             code = request.args.get('code')
-            session_token = request.args.get('session_token')
+            code_verifier = request.args.get('code_verifier')
 
             print("Authorization Code:", code)
-            print("Session Token:", session_token)
+            print("Code Verifier:", code_verifier)
 
-            if not code or not session_token:
-                return jsonify({"success": False, "msg": "Authorization code or session token not provided"}), 400
-
-            # Retrieve the stored code_verifier from MongoDB
-            session_data = load_session(session_token)
-            print("Session Data:", session_data)
-
-            if not session_data:
-                return jsonify({"success": False, "msg": "Session data not found"}), 400
-
-            code_verifier = session_data.get('code_verifier')
-            print("Retrieved Code Verifier:", code_verifier)
-
-            if not code_verifier:
-                return jsonify({"success": False, "msg": "Code verifier not found in session"}), 400
+            if not code or not code_verifier:
+                return jsonify({"success": False, "msg": "Authorization code or code verifier not provided"}), 400
 
             # Exchange the authorization code for an access token
             token_url = "https://login.salesforce.com/services/oauth2/token"
@@ -402,8 +365,6 @@ class SalesforceOauthCallback(Resource):
             token_response = requests.post(token_url, data=token_data, headers=token_headers)
             token_json = token_response.json()
 
-            print("Token Response JSON:", token_json)
-
             if 'error' in token_json:
                 return jsonify({"success": False, "msg": token_json['error']}), 400
 
@@ -415,10 +376,15 @@ class SalesforceOauthCallback(Resource):
             user_info_url = f"{instance_url}/services/oauth2/userinfo"
             user_info_response = requests.get(user_info_url, headers={'Authorization': f'Bearer {access_token}'})
             user_info = user_info_response.json()
+            user_data = {
+                "username": user_info.get('username'),
+                "email": user_info.get('email'),
+                "created_at": datetime.utcnow(),
+            }
 
             print("User Info JSON:", user_info)
 
-            email = user_info.get('email')
+            email = user_data.get('email')
             if not email:
                 return jsonify({"success": False, "msg": "Email not found in user info"}), 400
 
@@ -430,11 +396,25 @@ class SalesforceOauthCallback(Resource):
                     "username": username,
                     "email": email,
                     "created_at": datetime.utcnow(),
-                    "provider": "salesforce",
-                    "user_info": user_info
                 }
                 mongo.db.users.insert_one(user_data)
                 user = user_data
+
+                try:
+                    cognito_client.sign_up(
+                        ClientId=BaseConfig.COGNITO_APP_CLIENT_ID,
+                        Username=username,
+                        Password=generate_strong_password(),
+                        UserAttributes=[
+                            {'Name': 'email', 'Value': email},
+                        ]
+                    )
+                    print(f"User {username} created in Cognito.")
+
+                except cognito_client.exceptions.UsernameExistsException:
+                    print(f"User {username} already exists in Cognito.")
+                except Exception as e:
+                    print(f"Failed to create user in Cognito: {str(e)}")
             else:
                 mongo.db.users.update_one(
                     {"email": email},
@@ -442,9 +422,9 @@ class SalesforceOauthCallback(Resource):
                 )
                 user = existing_user
 
+
             # Serialize the user data for JSON response
             user_serialized = serialize_user(user)
-            print("Serialized User:", user_serialized)
 
             # Prepare the response as an object with tokens and user info
             response_data = {
@@ -454,9 +434,6 @@ class SalesforceOauthCallback(Resource):
                 "user": user_serialized
             }
             print("Response Data:", response_data)
-
-            # Optionally delete session after use
-            delete_session(session_token)
 
             # Return the JSON response
             return jsonify(response_data)

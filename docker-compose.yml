@@ -22,7 +22,7 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - ./ssl-certs/noledgeloss.succeed.cl:/etc/ssl/certs:ro
+      - ./ssl-certs/noledgeloss.succeed.cl:/etc/letsencrypt/live/noledgeloss.succeed.cl:ro
     networks:
       - app-network
     depends_on:

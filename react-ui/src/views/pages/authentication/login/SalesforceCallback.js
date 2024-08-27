@@ -14,14 +14,15 @@ const SalesforceCallback = () => {
             try {
                 const params = new URLSearchParams(window.location.search);
                 const code = params.get('code');
-                const session_token = localStorage.getItem('session_token');
-                if (!code || !session_token) {
-                    console.error("Authorization code or session token not found.");
+                const code_verifier = localStorage.getItem('code_verifier');
+
+                if (!code || !code_verifier) {
+                    console.error("Authorization code or code_verifier not found.");
                     return;
                 }
 
                 const response = await axios.get(configData.API_SERVER + 'users/salesforce/callback', {
-                    params: { code, session_token }
+                    params: { code, code_verifier }
                 });
                 console.log('Response from /api/users/salesforce/callback:', response.data);
 
@@ -31,11 +32,11 @@ const SalesforceCallback = () => {
                     localStorage.setItem('access_token', access_token);
                     localStorage.setItem('id_token', id_token);
                     localStorage.setItem('refresh_token', refresh_token);
-                    localStorage.setItem('user', user);
+                    localStorage.setItem('user', JSON.stringify(user));
 
                     dispatch({
                         type: ACCOUNT_INITIALIZE,
-                        payload: { isLoggedIn: true, user: user, token: access_token }
+                        payload: { isLoggedIn: true, user, token: access_token }
                     });
 
                     history.push('/dashboard/default');

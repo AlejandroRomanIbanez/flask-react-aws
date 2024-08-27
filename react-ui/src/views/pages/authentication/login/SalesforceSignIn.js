@@ -7,10 +7,10 @@ const SalesforceSignIn = () => {
     const signInWithSalesforce = async () => {
         try {
             const response = await axios.get(`${configData.API_SERVER}/users/salesforce/login`);
-            const { auth_url, session_token } = response.data;
+            const { auth_url, code_verifier } = response.data;
 
-            // Save the session token in localStorage
-            localStorage.setItem('session_token', session_token);
+            // Save the code_verifier in localStorage
+            localStorage.setItem('code_verifier', code_verifier);
 
             // Redirect to Salesforce authorization URL
             window.location.href = auth_url;
