@@ -35,9 +35,28 @@ const GoogleSignIn = () => {
     };
 
     return (
-        <Button className={classes.googleButton} onClick={signInWithGoogle} fullWidth>
-            <FcGoogle className="google-icon" />
-            Sign in with Google
+        <Button
+            onClick={signInWithGoogle}
+            fullWidth
+            startIcon={<FcGoogle size={24} />}
+            sx={{
+                padding: '10px',
+                backgroundColor: 'transparent',
+                border: '1px solid #7A869A',
+                color: '#2E3B55',
+                textTransform: 'none',
+                fontSize: '16px',
+                fontWeight: 'bold',
+                borderRadius: '8px',
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                '&:hover': {
+                    backgroundColor: '#E0E4E8',
+                },
+            }}
+        >
+            Google
         </Button>
     );
 };

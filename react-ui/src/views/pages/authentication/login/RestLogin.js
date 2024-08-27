@@ -1,6 +1,9 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
+import { FaSalesforce } from "react-icons/fa6";
+import { FcGoogle } from "react-icons/fc";
+
 
 import configData from '../../../../config';
 
@@ -261,22 +264,29 @@ const RestLogin = (props, { ...others }) => {
 
                         <Box
                             sx={{
-                                mt: 2
+                                mt: 2,
+                                textAlign: 'center',
+                                fontSize: '16px',
+                                fontWeight: 'bold',
+                                color: '#7A869A',
                             }}
                         >
-                            <AnimateButton>
-                                <GoogleSignIn />
-                            </AnimateButton>
+                            — OR —
                         </Box>
 
                         <Box
                             sx={{
-                                mt: 2
+                                mt: 2,
+                                display: 'flex',
+                                justifyContent: 'space-between',
                             }}
                         >
-                            <AnimateButton>
+                            <Box sx={{ width: '48%' }}>
                                 <SalesforceSignIn />
-                            </AnimateButton>
+                            </Box>
+                            <Box sx={{ width: '48%' }}>
+                                <GoogleSignIn />
+                            </Box>
                         </Box>
                     </form>
                 )}

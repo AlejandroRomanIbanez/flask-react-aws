@@ -2,6 +2,7 @@ import React from 'react';
 import { Button } from '@material-ui/core';
 import axios from 'axios';
 import configData from '../../../../config';
+import { FaSalesforce } from 'react-icons/fa6';
 
 const SalesforceSignIn = () => {
     const signInWithSalesforce = async () => {
@@ -20,19 +21,28 @@ const SalesforceSignIn = () => {
     };
 
     return (
-        <Button 
-            onClick={signInWithSalesforce} 
-            style={{
-                padding: '10px 20px',
-                backgroundColor: '#00A1E0',
-                color: '#fff',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                fontSize: '16px'
+        <Button
+            onClick={signInWithSalesforce}
+            fullWidth
+            startIcon={<FaSalesforce size={24} />}
+            sx={{
+                padding: '10px',
+                backgroundColor: 'transparent',
+                border: '1px solid #7A869A',
+                color: '#2E3B55',
+                textTransform: 'none',
+                fontSize: '16px',
+                fontWeight: 'bold',
+                borderRadius: '8px',
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                '&:hover': {
+                    backgroundColor: '#E0E4E8',
+                },
             }}
         >
-            Sign in with Salesforce
+            Salesforce
         </Button>
     );
 };

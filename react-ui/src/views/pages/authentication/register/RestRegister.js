@@ -36,6 +36,7 @@ import { strengthColor, strengthIndicator } from '../../../../utils/password-str
 import Visibility from '@material-ui/icons/Visibility';
 import VisibilityOff from '@material-ui/icons/VisibilityOff';
 import GoogleSignIn from '../login/GoogleSign';
+import SalesforceSignIn from '../login/SalesforceSignIn';
 
 // style constant
 const useStyles = makeStyles((theme) => ({
@@ -320,12 +321,29 @@ const RestRegister = ({ ...others }) => {
 
                         <Box
                             sx={{
-                                mt: 2
+                                mt: 2,
+                                textAlign: 'center',
+                                fontSize: '16px',
+                                fontWeight: 'bold',
+                                color: '#7A869A',
                             }}
                         >
-                            <AnimateButton>
+                            — OR —
+                        </Box>
+
+                        <Box
+                            sx={{
+                                mt: 2,
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                            }}
+                        >
+                            <Box sx={{ width: '48%' }}>
+                                <SalesforceSignIn />
+                            </Box>
+                            <Box sx={{ width: '48%' }}>
                                 <GoogleSignIn />
-                            </AnimateButton>
+                            </Box>
                         </Box>
                     </form>
                 )}
