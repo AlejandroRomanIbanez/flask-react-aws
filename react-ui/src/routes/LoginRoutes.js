@@ -19,7 +19,7 @@ const LoginRoutes = () => {
     const location = useLocation();
 
     return (
-        <Route path={['/login', '/register', '/api/users/callback', '/api/users/salesforce/callback']}>
+        <Route path={['/login', '/register', '/api/users/callback', '/users/salesforce/callback']}>
             <MinimalLayout>
                 <Switch location={location} key={location.pathname}>
                     <NavMotion>
@@ -27,7 +27,7 @@ const LoginRoutes = () => {
                             <Route path="/login" component={AuthLogin} />
                             <Route path="/register" component={AuthRegister} />
                             <Route path="/api/users/callback" component={Callback} />
-                            <Route path="/api/users/salesforce/callback" component={SalesforceCallback} />
+                            <Route path="/users/salesforce/callback" component={SalesforceCallback} />
                         </GuestGuard>
                     </NavMotion>
                 </Switch>

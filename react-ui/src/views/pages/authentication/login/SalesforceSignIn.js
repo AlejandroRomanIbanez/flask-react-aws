@@ -7,7 +7,7 @@ import { FaSalesforce } from 'react-icons/fa6';
 const SalesforceSignIn = () => {
     const signInWithSalesforce = async () => {
         try {
-            const response = await axios.get(`${configData.API_SERVER}/users/salesforce/login`);
+            const response = await axios.get(`${configData.API_SERVER}users/salesforce/login`);
             const { auth_url, code_verifier } = response.data;
 
             // Save the code_verifier in localStorage
